@@ -1,37 +1,40 @@
+use chrono;
+use chrono::Datelike;
+use reqwest;
+use bytes::Bytes;
 use sqlite;
-use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::{Row, RowAccessor};
-use std::{fs::File, path::Path};
-
-use std::ffi::CString;
 use libc::{c_char, c_int};
 use sqlite3_sys;
+use parquet::file::reader::{FileReader, SerializedFileReader};
+use parquet::record::{Row, RowAccessor, RowFormatter};
+use std::{fs::File};
+use std::io::{Error, ErrorKind, Cursor, copy};
+use std::env;
+use std::ffi::CString;
 
-// https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_yyyy-mm.parquet
 // date,premise_code,item_code,price
 pub struct Price {
-    pub date: i64,
+    pub date: String,
     pub premise_code: i64,
     pub item_code: i64,
     pub price: f64,
 }
 
-fn push_price(record: Row, memory_db: &sqlite::Connection) {
+fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
     let temp = Price {
-        date: record.get_timestamp_micros(0).unwrap(),
+        date: record.fmt(0).to_string(),
         premise_code: record.get_int(1).unwrap() as i64,
         item_code: record.get_int(2).unwrap() as i64,
         price: record.get_double(3).unwrap(),
     };
     let mut statement = memory_db.prepare("INSERT INTO prices VALUES (:date, :premise_code, :item_code, :price)").unwrap();
-    statement.bind(&[(":date", temp.date)][..]).unwrap();
+    statement.bind(&[(":date", temp.date.trim())][..]).unwrap();
     statement.bind(&[(":premise_code", temp.premise_code)][..]).unwrap();
     statement.bind(&[(":item_code", temp.item_code)][..]).unwrap();
     statement.bind(&[(":price", temp.price)][..]).unwrap();
     statement.next().unwrap();
 }
 
-// https://storage.googleapis.com/dosm-public-pricecatcher/lookup_premise.parquet
 // premise_code,premise,address,premise_type,state,district
 pub struct Premise {
     pub premise_code: i64,
@@ -62,7 +65,6 @@ fn push_premise(record: Row, memory_db: &sqlite::Connection) {
     statement.next().unwrap();
 }
 
-// https://storage.googleapis.com/dosm-public-pricecatcher/lookup_item.parquet
 // item_code,item,unit,item_group,item_category
 pub struct Item {
     pub item_code: i64,
@@ -90,11 +92,7 @@ fn push_item(record: Row, memory_db: &sqlite::Connection) {
     statement.next().unwrap();
 }
 
-fn execute(handler: fn(Row, &sqlite::Connection), file_path: &str, memory_db: &sqlite::Connection) {
-    let path = Path::new(file_path);
-    let file = File::open(&path).unwrap_or_else(|error| {
-        panic!("Problem opening the file: {:?}", error);
-    });
+fn execute(handler: fn(Row, &sqlite::Connection), file: File, memory_db: &sqlite::Connection) {
     let reader = SerializedFileReader::new(file).unwrap();
     let mut iter = reader.get_row_iter(None).unwrap();
     while let Some(record) = iter.next() {
@@ -102,7 +100,62 @@ fn execute(handler: fn(Row, &sqlite::Connection), file_path: &str, memory_db: &s
     }
 }
 
+fn download_file(cloud_path: &str) -> Result<Bytes, reqwest::Error> {
+    let client = reqwest::blocking::Client::builder().timeout(Some(std::time::Duration::from_secs(3600))).build().unwrap();
+    let response_bytes = match client.get(cloud_path).send() {
+        Ok(response) => response.bytes()?,
+        Err(error) => return Err(error),
+    };
+    Ok(response_bytes)
+}
+
+fn get_file_latest_revision(cloud_path: &str) -> Result<u64, reqwest::Error> {
+    let client = reqwest::blocking::Client::new();
+    let response = match client.head(cloud_path).send() {
+        Ok(response) => response,
+        Err(error) => return Err(error),
+    };
+    let content_length = response.headers()["content-length"].to_str().unwrap().parse::<u64>().unwrap();
+    Ok(content_length)
+}
+
+fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
+    let mut check_file_latest_revision = true;
+
+    let mut parquet_file = match File::open(local_path) {
+        Ok(file) => file,
+        Err(error) => {
+            if error.kind() == ErrorKind::NotFound {
+                println!("Download: {}", cloud_path);
+                check_file_latest_revision = false;
+                let mut file = File::create(local_path)?;
+                let mut content = Cursor::new(download_file(cloud_path).unwrap());
+                copy(&mut content, &mut file)?;
+                file
+            } else {
+                return Err(error);
+            }
+        },
+    };
+
+    if check_file_latest_revision && parquet_file.metadata().unwrap().len() != get_file_latest_revision(cloud_path).unwrap() {
+        println!("Cached outdated, re-downloading: {}", cloud_path);
+        std::fs::remove_file(local_path).unwrap();
+        parquet_file = File::create(local_path)?;
+        let mut content = Cursor::new(download_file(cloud_path).unwrap());
+        copy(&mut content, &mut parquet_file)?;
+    } else {
+        println!("From Cached: {}", local_path);
+    }
+
+    Ok(parquet_file)
+}
+
 fn main() {
+
+    let current_date = chrono::Utc::now();
+    let year = current_date.year();
+    let month = current_date.month();
 
     let memory_db = sqlite::open(":memory:").unwrap();
     let sql_blueprint = "
@@ -112,61 +165,57 @@ fn main() {
     ";
     memory_db.execute(sql_blueprint).unwrap();
 
-    execute(push_price, "/home/arma7x/Downloads/opendosm/pricecatcher_2022-01.parquet", &memory_db);
-    execute(push_premise, "/home/arma7x/Downloads/opendosm/lookup_premise.parquet", &memory_db);
-    execute(push_item, "/home/arma7x/Downloads/opendosm/lookup_item.parquet", &memory_db);
+    let mut tasks: Vec<(fn(Row, &sqlite::Connection), File, &sqlite::Connection)> = vec![];
 
-    let query = "SELECT COUNT(*) as total FROM prices";
-    memory_db
-    .iterate(query, |pairs| {
-        for &(name, value) in pairs.iter() {
-            println!("{} = {}", name, value.unwrap());
-        }
-        true
-    })
-    .unwrap();
-    println!("------------");
-    let query = "SELECT COUNT(*) as total FROM premises";
-    memory_db
-    .iterate(query, |pairs| {
-        for &(name, value) in pairs.iter() {
-            println!("{} = {}", name, value.unwrap());
-        }
-        true
-    })
-    .unwrap();
-    println!("------------");
-    let query = "SELECT COUNT(*) as total FROM items";
-    memory_db
-    .iterate(query, |pairs| {
-        for &(name, value) in pairs.iter() {
-            println!("{} = {}", name, value.unwrap());
-        }
-        true
-    })
-    .unwrap();
+    let mut base_path = env::current_exe().unwrap();
+    base_path.pop();
+
+    let item_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_item.parquet";
+    let mut item_parquet = base_path.clone();
+    item_parquet.push("lookup_item.parquet");
+    let item_parquet_file = get_file(item_parquet.into_os_string().to_str().unwrap(), item_parquet_url).unwrap();
+    tasks.push((push_item, item_parquet_file, &memory_db));
+
+    let premise_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_premise.parquet";
+    let mut premise_parquet = base_path.clone();
+    premise_parquet.push("lookup_premise.parquet");
+    let premise_parquet_file = get_file(premise_parquet.into_os_string().to_str().unwrap(), premise_parquet_url).unwrap();
+    tasks.push((push_premise, premise_parquet_file, &memory_db));
+
+    let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}-{:02}.parquet", year, month);
+    let pricecatcher_parquet_url = pricecatcher_parquet_url.as_str();
+    let mut pricecatcher_parquet = base_path.clone();
+    pricecatcher_parquet.push(format!("pricecatcher_{}-{:02}.parquet", year, month));
+    let pricecatcher_parquet_file = get_file(pricecatcher_parquet.into_os_string().to_str().unwrap(), pricecatcher_parquet_url).unwrap();
+    tasks.push((push_pricecatcher, pricecatcher_parquet_file, &memory_db));
+
+    for (handler, file, database_conn) in tasks {
+        execute(handler, file, database_conn);
+    }
 
     unsafe {
-        let name = "main";
         let mut rc: c_int = 0;
 
-        let c_str = CString::new(name).unwrap();
+        let c_str = CString::new("main").unwrap();
         let main: *const c_char = c_str.as_ptr() as *const c_char;
 
-        let backup_memory_db = sqlite::open("/home/arma7x/Downloads/opendosm/backup.db").unwrap();
+        let mut backup_path = base_path.clone();
+        backup_path.push(format!("pricecatcher_{}-{:02}_{}.db", year, month, current_date.format("%Y-%m-%d %H:%M:%S").to_string()));
+        let backup_path_str = backup_path.into_os_string();
+        File::create(backup_path_str.to_str().unwrap()).unwrap();
+        let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
         backup_memory_db.execute(sql_blueprint).unwrap();
 
         let p_backup = sqlite3_sys::sqlite3_backup_init(backup_memory_db.as_raw(), main, memory_db.as_raw(), main);
         loop {
-            println!("Status begin:{:?}", rc);
-            println!("Progress {:?}, {:?}", sqlite3_sys::sqlite3_backup_remaining(p_backup), sqlite3_sys::sqlite3_backup_pagecount(p_backup));
-            rc = sqlite3_sys::sqlite3_backup_step(p_backup, 100);
-            println!("Status end :{:?}", rc);
+            rc = sqlite3_sys::sqlite3_backup_step(p_backup, 1000);
+            println!("Progress : {:?}, {:?}", sqlite3_sys::sqlite3_backup_remaining(p_backup), sqlite3_sys::sqlite3_backup_pagecount(p_backup));
             if rc == sqlite3_sys::SQLITE_OK || rc == sqlite3_sys::SQLITE_BUSY || rc == sqlite3_sys::SQLITE_LOCKED {
               sqlite3_sys::sqlite3_sleep(250);
             } else {
                 break;
             }
         }
+        println!("Saved path: {}", backup_path_str.to_str().unwrap());
     }
 }
