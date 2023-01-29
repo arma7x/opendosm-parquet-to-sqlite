@@ -6,6 +6,4 @@ https://open.dosm.gov.my/data-catalogue
 - PriceCatcher(merge **lookup_item.parquet**, **lookup_premise.parquet** and **pricecatcher_yyyy-mm.parquet** into single db file)
 
 TODO:
-- parsing command line arguments
-- fetch *.parquet from online source
-- cache
+- parsing command line arguments(opendosm yyyy-mm)
