@@ -159,7 +159,7 @@ fn main() {
 
     let memory_db = sqlite::open(":memory:").unwrap();
     let sql_blueprint = "
-        CREATE TABLE prices (date INTEGER, premise_code INTEGER, item_code INTEGER, price INTEGER);
+        CREATE TABLE prices (date TEXT, premise_code INTEGER, item_code INTEGER, price INTEGER);
         CREATE TABLE premises (premise_code INTEGER, premise TEXT, address TEXT, premise_type TEXT, state TEXT, district TEXT);
         CREATE TABLE items (item_code INTEGER, item TEXT, unit TEXT, item_group TEXT, item_category TEXT);
     ";
