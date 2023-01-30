@@ -1,4 +1,3 @@
-use chrono;
 use reqwest;
 use bytes::Bytes;
 use sqlite;
@@ -252,8 +251,9 @@ fn main() {
         let main: *const c_char = c_str.as_ptr() as *const c_char;
 
         let mut backup_path = base_path.clone();
-        backup_path.push(format!("pricecatcher_{}_{}.db", date, chrono::Utc::now().timestamp_millis()));
+        backup_path.push(format!("pricecatcher_{}.db", date));
         let backup_path_str = backup_path.into_os_string();
+        std::fs::remove_file(backup_path_str.to_str().unwrap());
         File::create(backup_path_str.to_str().unwrap()).unwrap();
         let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
         backup_memory_db.execute(sql_blueprint).unwrap();
@@ -268,6 +268,6 @@ fn main() {
                 break;
             }
         }
-        println!("Saved path: {}", backup_path_str.to_str().unwrap());
+        println!("Backup path: {}", backup_path_str.to_str().unwrap());
     }
 }
