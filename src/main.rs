@@ -1,5 +1,4 @@
 use chrono;
-use chrono::Datelike;
 use reqwest;
 use bytes::Bytes;
 use sqlite;
@@ -8,9 +7,10 @@ use sqlite3_sys;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::{Row, RowAccessor, RowFormatter};
 use std::{fs::File};
-use std::io::{Error, ErrorKind, Cursor, copy};
+use std::io::{Error, ErrorKind, Cursor, copy, stdin};
 use std::env;
 use std::ffi::CString;
+use scraper::{Html, Selector};
 
 // date,premise_code,item_code,price
 pub struct Price {
@@ -100,6 +100,33 @@ fn execute(handler: fn(Row, &sqlite::Connection), file: File, memory_db: &sqlite
     }
 }
 
+fn get_pricecatcher_records() -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    println!("Fetching pricecatcher records:  {}", "https://open.dosm.gov.my/data-catalogue");
+    let response = reqwest::blocking::get("https://open.dosm.gov.my/data-catalogue")?.text()?;
+    let document = scraper::Html::parse_document(&response);
+    let sections = Selector::parse("section")?;
+    let mut li_string = String::new();
+    for element in document.select(&sections) {
+        if element.text().nth(0).unwrap().trim() == "Economy: PriceCatcher" {
+            li_string = String::from(element.inner_html());
+            break;
+        }
+    }
+    if li_string == "" {
+        return Err(String::from("No options available").into());
+    }
+    let mut records: Vec<String> = vec![];
+    let fragment = Html::parse_fragment(&li_string);
+    let selector = Selector::parse("li").unwrap();
+    for element in fragment.select(&selector) {
+        let texts: Vec<&str> = element.text().nth(0).unwrap().trim().split(" ").collect();
+        if texts.len() == 2 && texts[0] == "PriceCatcher:" {
+            records.push(texts[1].replace("/", "-").to_string());
+        }
+    }
+    Ok(records)
+}
+
 fn download_file(cloud_path: &str) -> Result<Bytes, reqwest::Error> {
     let client = reqwest::blocking::Client::builder().timeout(Some(std::time::Duration::from_secs(3600))).build().unwrap();
     let response_bytes = match client.get(cloud_path).send() {
@@ -153,9 +180,32 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
 
 fn main() {
 
-    let current_date = chrono::Utc::now();
-    let year = current_date.year();
-    let month = current_date.month();
+    let records = get_pricecatcher_records().unwrap();
+    for (i, value) in records.iter().enumerate() {
+        println!("{} => {}", value, i);
+    }
+    println!("");
+    let mut len_or_choice = records.len() as u32;
+
+    loop {
+        println!("Please enter your choice:");
+        let mut num = String::new();
+        stdin().read_line(&mut num).expect("Failed to read line");
+        let num: u32 = match num.trim().parse() {
+            Ok(num) => num,
+            Err(_) => continue,
+        };
+        if num > len_or_choice - 1 {
+            println!("{num} is invalid");
+            continue;
+        } else {
+            len_or_choice = num;
+            break;
+        }
+    }
+
+    let date = records[len_or_choice as usize].as_str();
+    println!("You choice: {}", date);
 
     let memory_db = sqlite::open(":memory:").unwrap();
     let sql_blueprint = "
@@ -182,16 +232,18 @@ fn main() {
     let premise_parquet_file = get_file(premise_parquet.into_os_string().to_str().unwrap(), premise_parquet_url).unwrap();
     tasks.push((push_premise, premise_parquet_file, &memory_db));
 
-    let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}-{:02}.parquet", year, month);
+    let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}.parquet", date);
     let pricecatcher_parquet_url = pricecatcher_parquet_url.as_str();
     let mut pricecatcher_parquet = base_path.clone();
-    pricecatcher_parquet.push(format!("pricecatcher_{}-{:02}.parquet", year, month));
+    pricecatcher_parquet.push(format!("pricecatcher_{}.parquet", date));
     let pricecatcher_parquet_file = get_file(pricecatcher_parquet.into_os_string().to_str().unwrap(), pricecatcher_parquet_url).unwrap();
     tasks.push((push_pricecatcher, pricecatcher_parquet_file, &memory_db));
 
+    println!("Build database...");
     for (handler, file, database_conn) in tasks {
         execute(handler, file, database_conn);
     }
+    println!("Build database, DONE!");
 
     unsafe {
         let mut rc: c_int = 0;
@@ -200,7 +252,7 @@ fn main() {
         let main: *const c_char = c_str.as_ptr() as *const c_char;
 
         let mut backup_path = base_path.clone();
-        backup_path.push(format!("pricecatcher_{}-{:02}_{}.db", year, month, current_date.format("%Y-%m-%d %H:%M:%S").to_string()));
+        backup_path.push(format!("pricecatcher_{}_{}.db", date, chrono::Utc::now().timestamp_millis()));
         let backup_path_str = backup_path.into_os_string();
         File::create(backup_path_str.to_str().unwrap()).unwrap();
         let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
