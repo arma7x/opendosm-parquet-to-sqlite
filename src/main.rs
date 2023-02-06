@@ -22,9 +22,9 @@ pub struct Price {
 fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
     let temp = Price {
         date: record.fmt(0).to_string(),
-        premise_code: record.get_int(1).unwrap() as i64,
-        item_code: record.get_int(2).unwrap() as i64,
-        price: record.get_double(3).unwrap(),
+        premise_code: record.fmt(1).to_string().parse::<i64>().unwrap(),
+        item_code: record.fmt(2).to_string().parse::<i64>().unwrap(),
+        price: record.fmt(3).to_string().parse::<f64>().unwrap(),
     };
     let mut statement = memory_db.prepare("INSERT INTO prices VALUES (:date, :premise_code, :item_code, :price)").unwrap();
     statement.bind(&[(":date", temp.date.trim())][..]).unwrap();
@@ -47,7 +47,7 @@ pub struct Premise {
 fn push_premise(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
     let temp = Premise {
-        premise_code: record.get_long(0).unwrap(),
+        premise_code: record.fmt(0).to_string().parse::<i64>().unwrap(),
         premise: record.get_string(1).unwrap_or_else(|_error| &u).trim().to_string(),
         address: record.get_string(2).unwrap_or_else(|_error| &u).trim().to_string(),
         premise_type: record.get_string(3).unwrap_or_else(|_error| &u).trim().to_string(),
@@ -76,7 +76,7 @@ pub struct Item {
 fn push_item(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
     let temp = Item {
-        item_code: record.get_long(0).unwrap(),
+        item_code: record.fmt(0).to_string().parse::<i64>().unwrap(),
         item: record.get_string(1).unwrap_or_else(|_error| &u).trim().to_string(),
         unit: record.get_string(2).unwrap_or_else(|_error| &u).trim().to_string(),
         item_group: record.get_string(3).unwrap_or_else(|_error| &u).trim().to_string(),
