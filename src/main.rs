@@ -21,7 +21,7 @@ pub struct Price {
 
 fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
     let temp = Price {
-        date: record.fmt(0).to_string(),
+        date: record.fmt(0).to_string()[..10].to_string(),
         premise_code: record.fmt(1).to_string().parse::<i64>().unwrap(),
         item_code: record.fmt(2).to_string().parse::<i64>().unwrap(),
         price: record.fmt(3).to_string().parse::<f64>().unwrap(),
