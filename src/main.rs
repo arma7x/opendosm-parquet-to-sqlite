@@ -12,82 +12,37 @@ use std::ffi::CString;
 use scraper::{Html, Selector};
 
 // date,premise_code,item_code,price
-pub struct Price {
-    pub date: String,
-    pub premise_code: i64,
-    pub item_code: i64,
-    pub price: f64,
-}
-
 fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
-    let temp = Price {
-        date: record.fmt(0).to_string()[..10].to_string(),
-        premise_code: record.fmt(1).to_string().parse::<i64>().unwrap(),
-        item_code: record.fmt(2).to_string().parse::<i64>().unwrap(),
-        price: record.fmt(3).to_string().parse::<f64>().unwrap(),
-    };
     let mut statement = memory_db.prepare("INSERT INTO prices VALUES (:date, :premise_code, :item_code, :price)").unwrap();
-    statement.bind(&[(":date", temp.date.trim())][..]).unwrap();
-    statement.bind(&[(":premise_code", temp.premise_code)][..]).unwrap();
-    statement.bind(&[(":item_code", temp.item_code)][..]).unwrap();
-    statement.bind(&[(":price", temp.price)][..]).unwrap();
+    statement.bind(&[(":date", record.fmt(0).to_string()[..10].to_string().trim())][..]).unwrap();
+    statement.bind(&[(":premise_code", record.fmt(1).to_string().parse::<i64>().unwrap())][..]).unwrap();
+    statement.bind(&[(":item_code", record.fmt(2).to_string().parse::<i64>().unwrap())][..]).unwrap();
+    statement.bind(&[(":price", record.fmt(3).to_string().parse::<f64>().unwrap())][..]).unwrap();
     statement.next().unwrap();
 }
 
 // premise_code,premise,address,premise_type,state,district
-pub struct Premise {
-    pub premise_code: i64,
-    pub premise: String,
-    pub address: String,
-    pub premise_type: String,
-    pub state: String,
-    pub district: String,
-}
-
 fn push_premise(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
-    let temp = Premise {
-        premise_code: record.fmt(0).to_string().parse::<i64>().unwrap(),
-        premise: record.get_string(1).unwrap_or_else(|_error| &u).trim().to_string(),
-        address: record.get_string(2).unwrap_or_else(|_error| &u).trim().to_string(),
-        premise_type: record.get_string(3).unwrap_or_else(|_error| &u).trim().to_string(),
-        state: record.get_string(4).unwrap_or_else(|_error| &u).trim().to_string(),
-        district: record.get_string(5).unwrap_or_else(|_error| &u).trim().to_string(),
-    };
     let mut statement = memory_db.prepare("INSERT INTO premises VALUES (:premise_code, :premise, :address, :premise_type, :state, :district)").unwrap();
-    statement.bind(&[(":premise_code", temp.premise_code)][..]).unwrap();
-    statement.bind(&[(":premise", temp.premise.trim())][..]).unwrap();
-    statement.bind(&[(":address", temp.address.trim())][..]).unwrap();
-    statement.bind(&[(":premise_type", temp.premise_type.trim())][..]).unwrap();
-    statement.bind(&[(":state", temp.state.trim())][..]).unwrap();
-    statement.bind(&[(":district", temp.district.trim())][..]).unwrap();
+    statement.bind(&[(":premise_code", record.fmt(0).to_string().parse::<i64>().unwrap())][..]).unwrap();
+    statement.bind(&[(":premise", record.get_string(1).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":address", record.get_string(2).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":premise_type", record.get_string(3).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":state", record.get_string(4).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":district", record.get_string(5).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
     statement.next().unwrap();
 }
 
 // item_code,item,unit,item_group,item_category
-pub struct Item {
-    pub item_code: i64,
-    pub item: String,
-    pub unit: String,
-    pub item_group: String,
-    pub item_category: String,
-}
-
 fn push_item(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
-    let temp = Item {
-        item_code: record.fmt(0).to_string().parse::<i64>().unwrap(),
-        item: record.get_string(1).unwrap_or_else(|_error| &u).trim().to_string(),
-        unit: record.get_string(2).unwrap_or_else(|_error| &u).trim().to_string(),
-        item_group: record.get_string(3).unwrap_or_else(|_error| &u).trim().to_string(),
-        item_category: record.get_string(4).unwrap_or_else(|_error| &u).trim().to_string(),
-    };
     let mut statement = memory_db.prepare("INSERT INTO items VALUES (:item_code, :item, :unit, :item_group, :item_category)").unwrap();
-    statement.bind(&[(":item_code", temp.item_code)][..]).unwrap();
-    statement.bind(&[(":item", temp.item.trim())][..]).unwrap();
-    statement.bind(&[(":unit", temp.unit.trim())][..]).unwrap();
-    statement.bind(&[(":item_group", temp.item_group.trim())][..]).unwrap();
-    statement.bind(&[(":item_category", temp.item_category.trim())][..]).unwrap();
+    statement.bind(&[(":item_code", record.fmt(0).to_string().parse::<i64>().unwrap())][..]).unwrap();
+    statement.bind(&[(":item", record.get_string(1).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":unit", record.get_string(2).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":item_group", record.get_string(3).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+    statement.bind(&[(":item_category", record.get_string(4).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
     statement.next().unwrap();
 }
 
