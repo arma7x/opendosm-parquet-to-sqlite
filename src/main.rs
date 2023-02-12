@@ -9,9 +9,9 @@ use std::{fs::File};
 use std::io::{Error, ErrorKind, Cursor, copy, stdin};
 use std::env;
 use std::ffi::CString;
-use std::io::prelude::*;
 use scraper::{Html, Selector};
-use xz2::read::{XzEncoder, XzDecoder};
+use std::io::prelude::*;
+use zip::write::FileOptions;
 
 // date,premise_code,item_code,price
 fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
@@ -224,6 +224,7 @@ fn main() {
         backup_memory_db.execute(sql_blueprint).unwrap();
 
         let p_backup = sqlite3_sys::sqlite3_backup_init(backup_memory_db.as_raw(), main, memory_db.as_raw(), main);
+        println!("Export database...");
         loop {
             rc = sqlite3_sys::sqlite3_backup_step(p_backup, 1000);
             println!("Progress : {:?}, {:?}", sqlite3_sys::sqlite3_backup_remaining(p_backup), sqlite3_sys::sqlite3_backup_pagecount(p_backup));
@@ -233,9 +234,22 @@ fn main() {
                 break;
             }
         }
+        println!("Export database, DONE!");
     }
+    println!("Compressing");
     let buffer = get_file_as_byte_vec(backup_path_str.to_str().unwrap()).unwrap();
-    let compressor = XzEncoder::new(&buffer[..], 9);
-    let mut decompressor = XzDecoder::new(compressor);
-    println!("Backup path: {}", backup_path_str.to_str().unwrap());
+    let mut zip_path = base_path.clone();
+    zip_path.push("pricecatcher.tar.bz2");
+    let zip_path_str = zip_path.into_os_string();
+    std::fs::remove_file(zip_path_str.to_str().unwrap());
+    let file = std::fs::File::create(zip_path_str.to_str().unwrap()).unwrap();
+    let mut zip = zip::ZipWriter::new(file);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Bzip2).compression_level(Some(9)).unix_permissions(0o755);
+    zip.add_directory("/", Default::default()).unwrap();
+    zip.start_file("/pricecatcher.db", options).unwrap();
+    zip.write_all(&buffer).unwrap();
+    zip.finish().unwrap();
+    println!("Compressing, DONE!");
+
+    println!("Backup path: {}", zip_path_str.to_str().unwrap());
 }
