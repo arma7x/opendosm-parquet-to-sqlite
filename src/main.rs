@@ -9,7 +9,9 @@ use std::{fs::File};
 use std::io::{Error, ErrorKind, Cursor, copy, stdin};
 use std::env;
 use std::ffi::CString;
+use std::io::prelude::*;
 use scraper::{Html, Selector};
+use xz2::read::{XzEncoder, XzDecoder};
 
 // date,premise_code,item_code,price
 fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
@@ -132,6 +134,14 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
     Ok(parquet_file)
 }
 
+fn get_file_as_byte_vec(file_path: &str) -> Result<Vec<u8>, Error> {
+    let mut f = File::open(file_path)?;
+    let metadata = std::fs::metadata(file_path)?;
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer)?;
+    Ok(buffer)
+}
+
 fn main() {
 
     let records = get_pricecatcher_records().unwrap();
@@ -199,15 +209,15 @@ fn main() {
     }
     println!("Build database, DONE!");
 
+    let mut backup_path = base_path.clone();
+    backup_path.push(format!("pricecatcher_{}.db", date));
+    let backup_path_str = backup_path.into_os_string();
+
     unsafe {
         let mut rc: c_int = 0;
 
         let c_str = CString::new("main").unwrap();
         let main: *const c_char = c_str.as_ptr() as *const c_char;
-
-        let mut backup_path = base_path.clone();
-        backup_path.push(format!("pricecatcher_{}.db", date));
-        let backup_path_str = backup_path.into_os_string();
         std::fs::remove_file(backup_path_str.to_str().unwrap());
         File::create(backup_path_str.to_str().unwrap()).unwrap();
         let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
@@ -223,6 +233,9 @@ fn main() {
                 break;
             }
         }
-        println!("Backup path: {}", backup_path_str.to_str().unwrap());
     }
+    let buffer = get_file_as_byte_vec(backup_path_str.to_str().unwrap()).unwrap();
+    let compressor = XzEncoder::new(&buffer[..], 9);
+    let mut decompressor = XzDecoder::new(compressor);
+    println!("Backup path: {}", backup_path_str.to_str().unwrap());
 }
