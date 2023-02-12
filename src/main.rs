@@ -5,12 +5,11 @@ use libc::{c_char, c_int};
 use sqlite3_sys;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use parquet::record::{Row, RowAccessor, RowFormatter};
-use std::{fs::File};
-use std::io::{Error, ErrorKind, Cursor, copy, stdin};
+use std::{fs};
+use std::io::{Error, ErrorKind, Cursor, copy, stdin,prelude::*};
 use std::env;
 use std::ffi::CString;
 use scraper::{Html, Selector};
-use std::io::prelude::*;
 use zip::write::FileOptions;
 
 // date,premise_code,item_code,price
@@ -48,7 +47,7 @@ fn push_item(record: Row, memory_db: &sqlite::Connection) {
     statement.next().unwrap();
 }
 
-fn execute(handler: fn(Row, &sqlite::Connection), file: File, memory_db: &sqlite::Connection) {
+fn execute(handler: fn(Row, &sqlite::Connection), file: fs::File, memory_db: &sqlite::Connection) {
     let reader = SerializedFileReader::new(file).unwrap();
     let mut iter = reader.get_row_iter(None).unwrap();
     while let Some(record) = iter.next() {
@@ -102,16 +101,16 @@ fn get_file_latest_revision(cloud_path: &str) -> Result<u64, reqwest::Error> {
     Ok(content_length)
 }
 
-fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
+fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
     let mut check_file_latest_revision = true;
 
-    let mut parquet_file = match File::open(local_path) {
+    let mut parquet_file = match fs::File::open(local_path) {
         Ok(file) => file,
         Err(error) => {
             if error.kind() == ErrorKind::NotFound {
                 println!("Download: {}", cloud_path);
                 check_file_latest_revision = false;
-                let mut file = File::create(local_path)?;
+                let mut file = fs::File::create(local_path)?;
                 let mut content = Cursor::new(download_file(cloud_path).unwrap());
                 copy(&mut content, &mut file)?;
                 file
@@ -123,8 +122,8 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
 
     if check_file_latest_revision && parquet_file.metadata().unwrap().len() != get_file_latest_revision(cloud_path).unwrap() {
         println!("Cached outdated, re-downloading: {}", cloud_path);
-        std::fs::remove_file(local_path).unwrap();
-        parquet_file = File::create(local_path)?;
+        fs::remove_file(local_path).unwrap();
+        parquet_file = fs::File::create(local_path)?;
         let mut content = Cursor::new(download_file(cloud_path).unwrap());
         copy(&mut content, &mut parquet_file)?;
     } else {
@@ -135,8 +134,8 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<File, Error> {
 }
 
 fn get_file_as_byte_vec(file_path: &str) -> Result<Vec<u8>, Error> {
-    let mut f = File::open(file_path)?;
-    let metadata = std::fs::metadata(file_path)?;
+    let mut f = fs::File::open(file_path)?;
+    let metadata = fs::metadata(file_path)?;
     let mut buffer = vec![0; metadata.len() as usize];
     f.read(&mut buffer)?;
     Ok(buffer)
@@ -179,7 +178,7 @@ fn main() {
     ";
     memory_db.execute(sql_blueprint).unwrap();
 
-    let mut tasks: Vec<(fn(Row, &sqlite::Connection), File, &sqlite::Connection)> = vec![];
+    let mut tasks: Vec<(fn(Row, &sqlite::Connection), fs::File, &sqlite::Connection)> = vec![];
 
     let mut base_path = env::current_exe().unwrap();
     base_path.pop();
@@ -214,21 +213,21 @@ fn main() {
     let backup_path_str = backup_path.into_os_string();
 
     unsafe {
-        let mut rc: c_int = 0;
+        let mut _rc: c_int = 0;
 
         let c_str = CString::new("main").unwrap();
         let main: *const c_char = c_str.as_ptr() as *const c_char;
-        std::fs::remove_file(backup_path_str.to_str().unwrap());
-        File::create(backup_path_str.to_str().unwrap()).unwrap();
+        fs::remove_file(backup_path_str.to_str().unwrap()).unwrap();
+        fs::File::create(backup_path_str.to_str().unwrap()).unwrap();
         let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
         backup_memory_db.execute(sql_blueprint).unwrap();
 
         let p_backup = sqlite3_sys::sqlite3_backup_init(backup_memory_db.as_raw(), main, memory_db.as_raw(), main);
         println!("Export database...");
         loop {
-            rc = sqlite3_sys::sqlite3_backup_step(p_backup, 1000);
+            _rc = sqlite3_sys::sqlite3_backup_step(p_backup, 1000);
             println!("Progress : {:?}, {:?}", sqlite3_sys::sqlite3_backup_remaining(p_backup), sqlite3_sys::sqlite3_backup_pagecount(p_backup));
-            if rc == sqlite3_sys::SQLITE_OK || rc == sqlite3_sys::SQLITE_BUSY || rc == sqlite3_sys::SQLITE_LOCKED {
+            if _rc == sqlite3_sys::SQLITE_OK || _rc == sqlite3_sys::SQLITE_BUSY || _rc == sqlite3_sys::SQLITE_LOCKED {
               sqlite3_sys::sqlite3_sleep(250);
             } else {
                 break;
@@ -241,8 +240,8 @@ fn main() {
     let mut zip_path = base_path.clone();
     zip_path.push("pricecatcher.tar.bz2");
     let zip_path_str = zip_path.into_os_string();
-    std::fs::remove_file(zip_path_str.to_str().unwrap());
-    let file = std::fs::File::create(zip_path_str.to_str().unwrap()).unwrap();
+    fs::remove_file(zip_path_str.to_str().unwrap()).unwrap();
+    let file = fs::File::create(zip_path_str.to_str().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(file);
     let options = FileOptions::default().compression_method(zip::CompressionMethod::Bzip2).compression_level(Some(9)).unix_permissions(0o755);
     zip.add_directory("/", Default::default()).unwrap();
