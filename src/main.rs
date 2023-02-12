@@ -172,17 +172,17 @@ fn main() {
 
     let memory_db = sqlite::open(":memory:").unwrap();
     let sql_blueprint = "
-        CREATE TABLE prices (date TEXT, premise_code INTEGER, item_code INTEGER, price INTEGER);
+        CREATE TABLE prices (date VARCHAR(255), premise_code INTEGER, item_code INTEGER, price FLOAT);
         CREATE INDEX idx_prices_premise_code ON prices (premise_code);
         CREATE INDEX idx_prices_item_code ON prices (item_code);
 
-        CREATE TABLE premises (premise_code INTEGER, premise TEXT, address TEXT, premise_type TEXT, state TEXT, district TEXT);
+        CREATE TABLE premises (premise_code INTEGER, premise VARCHAR(255), address VARCHAR(255), premise_type VARCHAR(255), state VARCHAR(255), district VARCHAR(255));
         CREATE UNIQUE INDEX idx_premises_premise_code ON premises (premise_code);
         CREATE INDEX idx_premises_premise_type ON premises (premise_type);
         CREATE INDEX idx_premises_state ON premises (state);
         CREATE INDEX idx_premises_district ON premises (district);
 
-        CREATE TABLE items (item_code INTEGER, item TEXT, unit TEXT, item_group TEXT, item_category TEXT);
+        CREATE TABLE items (item_code INTEGER, item VARCHAR(255), unit VARCHAR(255), item_group VARCHAR(255), item_category VARCHAR(255));
         CREATE UNIQUE INDEX idx_items_item_code ON items (item_code);
         CREATE INDEX idx_items_item_group ON items (item_group);
         CREATE INDEX idx_items_item_category ON items (item_category);
