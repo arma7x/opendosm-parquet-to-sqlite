@@ -122,7 +122,7 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
 
     if check_file_latest_revision && parquet_file.metadata().unwrap().len() != get_file_latest_revision(cloud_path).unwrap() {
         println!("Cached outdated, re-downloading: {}", cloud_path);
-        fs::remove_file(local_path).unwrap();
+        fs::remove_file(local_path).unwrap_or_else(|_e| {});
         parquet_file = fs::File::create(local_path)?;
         let mut content = Cursor::new(download_file(cloud_path).unwrap());
         copy(&mut content, &mut parquet_file)?;
@@ -228,7 +228,7 @@ fn main() {
 
         let c_str = CString::new("main").unwrap();
         let main: *const c_char = c_str.as_ptr() as *const c_char;
-        fs::remove_file(backup_path_str.to_str().unwrap()).unwrap();
+        fs::remove_file(backup_path_str.to_str().unwrap()).unwrap_or_else(|_e| {});
         fs::File::create(backup_path_str.to_str().unwrap()).unwrap();
         let backup_memory_db = sqlite::open(backup_path_str.to_str().unwrap()).unwrap();
         backup_memory_db.execute(sql_blueprint).unwrap();
@@ -251,7 +251,7 @@ fn main() {
     let mut zip_path = base_path.clone();
     zip_path.push("pricecatcher.tar.bz2");
     let zip_path_str = zip_path.into_os_string();
-    fs::remove_file(zip_path_str.to_str().unwrap()).unwrap();
+    fs::remove_file(zip_path_str.to_str().unwrap()).unwrap_or_else(|_e| {});
     let file = fs::File::create(zip_path_str.to_str().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(file);
     let options = FileOptions::default().compression_method(zip::CompressionMethod::Bzip2).compression_level(Some(9)).unix_permissions(0o755);
