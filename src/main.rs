@@ -13,7 +13,7 @@ use scraper::{Html, Selector};
 use zip::write::FileOptions;
 
 // date,premise_code,item_code,price
-fn push_pricecatcher(record: Row, memory_db: &sqlite::Connection) {
+fn push_price(record: Row, memory_db: &sqlite::Connection) {
     let mut statement = memory_db.prepare("INSERT INTO prices VALUES (:date, :premise_code, :item_code, :price)").unwrap();
     statement.bind(&[(":date", record.fmt(0).to_string()[..10].to_string().trim())][..]).unwrap();
     statement.bind(&[(":premise_code", record.fmt(1).to_string().parse::<i64>().unwrap())][..]).unwrap();
@@ -211,13 +211,46 @@ fn main() {
     let mut pricecatcher_parquet = base_path.clone();
     pricecatcher_parquet.push(format!("pricecatcher_{}.parquet", date));
     let pricecatcher_parquet_file = get_file(pricecatcher_parquet.into_os_string().to_str().unwrap(), pricecatcher_parquet_url).unwrap();
-    tasks.push((push_pricecatcher, pricecatcher_parquet_file, &memory_db));
+    tasks.push((push_price, pricecatcher_parquet_file, &memory_db));
 
     println!("Build database...");
     for (handler, file, database_conn) in tasks {
         execute(handler, file, database_conn);
     }
     println!("Build database, DONE!");
+
+    println!("Filter latest prices...");
+    let mut latest_prices: Vec<(String, String, String, String)> = vec![];
+    let query = "
+        SELECT * FROM ( SELECT * from prices ORDER BY date desc )
+        GROUP BY premise_code, item_code
+        ORDER BY premise_code, item_code
+    ";
+    memory_db
+    .iterate(query, |pairs| {
+        latest_prices.push((pairs[0].1.unwrap().to_string(), pairs[1].1.unwrap().to_string(), pairs[2].1.unwrap().to_string(), pairs[3].1.unwrap().to_string()));
+        true
+    })
+    .unwrap();
+    memory_db.execute("
+        DROP TABLE prices;
+        CREATE TABLE prices (date VARCHAR(255), premise_code INTEGER, item_code INTEGER, price FLOAT);
+        CREATE INDEX idx_prices_premise_code ON prices (premise_code);
+        CREATE INDEX idx_prices_item_code ON prices (item_code);
+    ").unwrap();
+    for record in latest_prices.iter() {
+        let mut statement = memory_db.prepare("INSERT INTO prices VALUES (:date, :premise_code, :item_code, :price)").unwrap();
+        statement.bind(&[(":date", record.0.to_string()[..10].to_string().trim())][..]).unwrap();
+        statement.bind(&[(":premise_code", record.1.to_string().parse::<i64>().unwrap())][..]).unwrap();
+        statement.bind(&[(":item_code", record.2.to_string().parse::<i64>().unwrap())][..]).unwrap();
+        statement.bind(&[(":price", record.3.to_string().parse::<f64>().unwrap())][..]).unwrap();
+        statement.next().unwrap();
+    }
+    println!("Filter latest prices, DONE!: {:}", latest_prices.len());
+
+    println!("Vacuum database...");
+    memory_db.execute("VACUUM;").unwrap();
+    println!("Vacuum database, DONE!");
 
     let mut backup_path = base_path.clone();
     backup_path.push(format!("pricecatcher_{}.db", date));
