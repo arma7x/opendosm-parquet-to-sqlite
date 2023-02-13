@@ -3,12 +3,16 @@ use bytes::Bytes;
 use sqlite;
 use libc::{c_char, c_int};
 use sqlite3_sys;
-use parquet::file::reader::{FileReader, SerializedFileReader};
-use parquet::record::{Row, RowAccessor, RowFormatter};
-use std::{fs};
-use std::io::{Error, ErrorKind, Cursor, copy, stdin,prelude::*};
-use std::env;
-use std::ffi::CString;
+use parquet::{
+    file::reader::{FileReader, SerializedFileReader},
+    record::{Row, RowAccessor, RowFormatter},
+};
+use std::{
+    fs,
+    env,
+    io::{Error, ErrorKind, Cursor, copy, stdin,prelude::*},
+    ffi::CString,
+};
 use scraper::{Html, Selector};
 use zip::write::FileOptions;
 
