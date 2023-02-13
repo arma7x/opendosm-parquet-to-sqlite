@@ -113,7 +113,8 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
                 let mut file = fs::File::create(local_path)?;
                 let mut content = Cursor::new(download_file(cloud_path).unwrap());
                 copy(&mut content, &mut file)?;
-                file
+                drop(&file);
+                fs::File::open(local_path).unwrap()
             } else {
                 return Err(error);
             }
@@ -126,6 +127,8 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
         parquet_file = fs::File::create(local_path)?;
         let mut content = Cursor::new(download_file(cloud_path).unwrap());
         copy(&mut content, &mut parquet_file)?;
+        drop(&parquet_file);
+        parquet_file = fs::File::open(local_path).unwrap();
     } else {
         println!("From Cached: {}", local_path);
     }
