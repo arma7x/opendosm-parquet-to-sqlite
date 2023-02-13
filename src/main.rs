@@ -196,15 +196,21 @@ fn main() {
 
     let mut base_path = env::current_exe().unwrap();
     base_path.pop();
-
+    base_path.push("__cached__");
+    if std::path::Path::new(base_path.to_str().unwrap()).exists() == false {
+        fs::create_dir(base_path.to_str().unwrap()).unwrap();
+    }
+    base_path.pop();
     let item_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_item.parquet";
     let mut item_parquet = base_path.clone();
+    item_parquet.push("__cached__");
     item_parquet.push("lookup_item.parquet");
     let item_parquet_file = get_file(item_parquet.into_os_string().to_str().unwrap(), item_parquet_url).unwrap();
     tasks.push((push_item, item_parquet_file, &memory_db));
 
     let premise_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_premise.parquet";
     let mut premise_parquet = base_path.clone();
+    premise_parquet.push("__cached__");
     premise_parquet.push("lookup_premise.parquet");
     let premise_parquet_file = get_file(premise_parquet.into_os_string().to_str().unwrap(), premise_parquet_url).unwrap();
     tasks.push((push_premise, premise_parquet_file, &memory_db));
@@ -212,6 +218,7 @@ fn main() {
     let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}.parquet", date);
     let pricecatcher_parquet_url = pricecatcher_parquet_url.as_str();
     let mut pricecatcher_parquet = base_path.clone();
+    pricecatcher_parquet.push("__cached__");
     pricecatcher_parquet.push(format!("pricecatcher_{}.parquet", date));
     let pricecatcher_parquet_file = get_file(pricecatcher_parquet.into_os_string().to_str().unwrap(), pricecatcher_parquet_url).unwrap();
     tasks.push((push_price, pricecatcher_parquet_file, &memory_db));
@@ -256,6 +263,7 @@ fn main() {
     println!("Vacuum database, DONE!");
 
     let mut backup_path = base_path.clone();
+    backup_path.push("__cached__");
     backup_path.push(format!("pricecatcher_{}.db", date));
     let backup_path_str = backup_path.into_os_string();
 
