@@ -297,12 +297,12 @@ fn main() {
     println!("Compressing");
     let buffer = get_file_as_byte_vec(backup_path_str.to_str().unwrap()).unwrap();
     let mut zip_path = base_path.clone();
-    zip_path.push("pricecatcher.tar.bz2");
+    zip_path.push("pricecatcher.zip");
     let zip_path_str = zip_path.into_os_string();
     fs::remove_file(zip_path_str.to_str().unwrap()).unwrap_or_else(|_e| {});
     let file = fs::File::create(zip_path_str.to_str().unwrap()).unwrap();
     let mut zip = zip::ZipWriter::new(file);
-    let options = FileOptions::default().compression_method(zip::CompressionMethod::Bzip2).compression_level(Some(9)).unix_permissions(0o755);
+    let options = FileOptions::default().compression_method(zip::CompressionMethod::Deflated).compression_level(Some(9)).unix_permissions(0o755);
     zip.add_directory("/", Default::default()).unwrap();
     zip.start_file("/pricecatcher.db", options).unwrap();
     zip.write_all(&buffer).unwrap();
