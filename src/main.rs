@@ -236,9 +236,8 @@ fn main() {
     println!("Filter latest prices...");
     let mut latest_prices: Vec<(String, String, String, String)> = vec![];
     let query = "
-        SELECT * FROM ( SELECT * from prices ORDER BY date desc )
+        SELECT * FROM (SELECT * from prices ORDER BY date desc)
         GROUP BY premise_code, item_code
-        ORDER BY premise_code, item_code
     ";
     memory_db
     .iterate(query, |pairs| {
