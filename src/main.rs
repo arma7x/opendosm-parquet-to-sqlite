@@ -149,28 +149,31 @@ fn get_file_as_byte_vec(file_path: &str) -> Result<Vec<u8>, Error> {
 }
 
 fn main() {
+    let args: Vec<String> = env::args().collect();
 
     let records = get_pricecatcher_records().unwrap();
     for (i, value) in records.iter().enumerate() {
         println!("{} => {}", value, i);
     }
     println!("");
-    let mut len_or_choice = records.len() as u32;
+    let mut len_or_choice = records.len() as u32 - 1;
 
-    loop {
-        println!("Please enter your choice:");
-        let mut num = String::new();
-        stdin().read_line(&mut num).expect("Failed to read line");
-        let num: u32 = match num.trim().parse() {
-            Ok(num) => num,
-            Err(_) => continue,
-        };
-        if num > len_or_choice - 1 {
-            println!("{num} is invalid");
-            continue;
-        } else {
-            len_or_choice = num;
-            break;
+    if args.contains(&String::from("--latest")) == false {
+        loop {
+            println!("Please enter your choice:");
+            let mut num = String::new();
+            stdin().read_line(&mut num).expect("Failed to read line");
+            let num: u32 = match num.trim().parse() {
+                Ok(num) => num,
+                Err(_) => continue,
+            };
+            if num > len_or_choice - 1 {
+                println!("{num} is invalid");
+                continue;
+            } else {
+                len_or_choice = num;
+                break;
+            }
         }
     }
 
