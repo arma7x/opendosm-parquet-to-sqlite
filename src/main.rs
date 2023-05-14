@@ -8,6 +8,7 @@ use parquet::{
     record::{Row, RowAccessor, RowFormatter},
 };
 use std::{
+    process,
     fs,
     env,
     io::{Error, ErrorKind, Cursor, copy, stdin,prelude::*},
@@ -105,7 +106,7 @@ fn get_file_latest_revision(cloud_path: &str) -> Result<u64, reqwest::Error> {
     Ok(content_length)
 }
 
-fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
+fn get_file(local_path: &str, cloud_path: &str) -> Result<(fs::File, bool), Error> {
     let mut check_file_latest_revision = true;
 
     let mut parquet_file = match fs::File::open(local_path) {
@@ -125,6 +126,7 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
         },
     };
 
+    let mut cache = false;
     if check_file_latest_revision && parquet_file.metadata().unwrap().len() != get_file_latest_revision(cloud_path).unwrap() {
         println!("Cached outdated, re-downloading: {}", cloud_path);
         fs::remove_file(local_path).unwrap_or_else(|_e| {});
@@ -134,10 +136,11 @@ fn get_file(local_path: &str, cloud_path: &str) -> Result<fs::File, Error> {
         drop(&parquet_file);
         parquet_file = fs::File::open(local_path).unwrap();
     } else {
+        cache = true;
         println!("From Cached: {}", local_path);
     }
 
-    Ok(parquet_file)
+    Ok((parquet_file, cache))
 }
 
 fn get_file_as_byte_vec(file_path: &str) -> Result<Vec<u8>, Error> {
@@ -213,14 +216,14 @@ fn main() {
     item_parquet.push("__cached__");
     item_parquet.push("lookup_item.parquet");
     let item_parquet_file = get_file(item_parquet.into_os_string().to_str().unwrap(), item_parquet_url).unwrap();
-    tasks.push((push_item, item_parquet_file, &memory_db));
+    tasks.push((push_item, item_parquet_file.0, &memory_db));
 
     let premise_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_premise.parquet";
     let mut premise_parquet = base_path.clone();
     premise_parquet.push("__cached__");
     premise_parquet.push("lookup_premise.parquet");
     let premise_parquet_file = get_file(premise_parquet.into_os_string().to_str().unwrap(), premise_parquet_url).unwrap();
-    tasks.push((push_premise, premise_parquet_file, &memory_db));
+    tasks.push((push_premise, premise_parquet_file.0, &memory_db));
 
     let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}.parquet", date);
     let pricecatcher_parquet_url = pricecatcher_parquet_url.as_str();
@@ -228,7 +231,12 @@ fn main() {
     pricecatcher_parquet.push("__cached__");
     pricecatcher_parquet.push(format!("pricecatcher_{}.parquet", date));
     let pricecatcher_parquet_file = get_file(pricecatcher_parquet.into_os_string().to_str().unwrap(), pricecatcher_parquet_url).unwrap();
-    tasks.push((push_price, pricecatcher_parquet_file, &memory_db));
+    tasks.push((push_price, pricecatcher_parquet_file.0, &memory_db));
+
+    if item_parquet_file.1 && premise_parquet_file.1 && pricecatcher_parquet_file.1 {
+        println!("Data up-to-date!!!");
+        process::exit(1);
+    }
 
     println!("Build database...");
     for (handler, file, database_conn) in tasks {
