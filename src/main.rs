@@ -31,9 +31,9 @@ fn push_price(record: Row, memory_db: &sqlite::Connection) {
 fn push_premise(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
     match record.fmt(0).to_string().parse::<f64>(){
-        Ok(valF64) => {
+        Ok(val_f64) => {
             let mut statement = memory_db.prepare("INSERT INTO premises VALUES (:premise_code, :premise, :address, :premise_type, :state, :district)").unwrap();
-            statement.bind(&[(":premise_code", valF64.round() as i64)][..]).unwrap();
+            statement.bind(&[(":premise_code", val_f64.round() as i64)][..]).unwrap();
             statement.bind(&[(":premise", record.get_string(1).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
             statement.bind(&[(":address", record.get_string(2).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
             statement.bind(&[(":premise_type", record.get_string(3).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
