@@ -30,14 +30,19 @@ fn push_price(record: Row, memory_db: &sqlite::Connection) {
 // premise_code,premise,address,premise_type,state,district
 fn push_premise(record: Row, memory_db: &sqlite::Connection) {
     let u = String::from("UNKNOWN");
-    let mut statement = memory_db.prepare("INSERT INTO premises VALUES (:premise_code, :premise, :address, :premise_type, :state, :district)").unwrap();
-    statement.bind(&[(":premise_code", record.fmt(0).to_string().parse::<i64>().unwrap())][..]).unwrap();
-    statement.bind(&[(":premise", record.get_string(1).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
-    statement.bind(&[(":address", record.get_string(2).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
-    statement.bind(&[(":premise_type", record.get_string(3).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
-    statement.bind(&[(":state", record.get_string(4).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
-    statement.bind(&[(":district", record.get_string(5).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
-    statement.next().unwrap();
+    match record.fmt(0).to_string().parse::<f64>(){
+        Ok(valF64) => {
+            let mut statement = memory_db.prepare("INSERT INTO premises VALUES (:premise_code, :premise, :address, :premise_type, :state, :district)").unwrap();
+            statement.bind(&[(":premise_code", valF64.round() as i64)][..]).unwrap();
+            statement.bind(&[(":premise", record.get_string(1).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+            statement.bind(&[(":address", record.get_string(2).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+            statement.bind(&[(":premise_type", record.get_string(3).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+            statement.bind(&[(":state", record.get_string(4).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+            statement.bind(&[(":district", record.get_string(5).unwrap_or_else(|_error| &u).trim())][..]).unwrap();
+            statement.next().unwrap();
+        },
+        Err(err) => println!("Error: {:?} {:?}", err,record.fmt(0).to_string()),
+    }
 }
 
 // item_code,item,unit,item_group,item_category
