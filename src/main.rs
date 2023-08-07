@@ -240,7 +240,7 @@ fn main() {
 
     if item_parquet_file.1 && premise_parquet_file.1 && pricecatcher_parquet_file.1 {
         println!("Data up-to-date!!!");
-        process::exit(1);
+        // process::exit(1);
     }
 
     println!("Build database...");
