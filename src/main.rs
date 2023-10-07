@@ -72,7 +72,7 @@ fn get_pricecatcher_records() -> Result<Vec<String>, Box<dyn std::error::Error>>
     let sections = Selector::parse("section")?;
     let mut li_string = String::new();
     for element in document.select(&sections) {
-        if element.text().nth(0).unwrap().trim() == "Economy: PriceCatcher" {
+        if element.text().nth(0).unwrap().trim() == "Consumer Prices: PriceCatcher" {
             li_string = String::from(element.inner_html());
             break;
         }
