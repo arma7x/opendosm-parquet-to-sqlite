@@ -216,21 +216,21 @@ fn main() {
         fs::create_dir(base_path.to_str().unwrap()).unwrap();
     }
     base_path.pop();
-    let item_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_item.parquet";
+    let item_parquet_url = "https://storage.data.gov.my/pricecatcher/lookup_item.parquet";
     let mut item_parquet = base_path.clone();
     item_parquet.push("__cached__");
     item_parquet.push("lookup_item.parquet");
     let item_parquet_file = get_file(item_parquet.into_os_string().to_str().unwrap(), item_parquet_url).unwrap();
     tasks.push((push_item, item_parquet_file.0, &memory_db));
 
-    let premise_parquet_url = "https://storage.googleapis.com/dosm-public-pricecatcher/lookup_premise.parquet";
+    let premise_parquet_url = "https://storage.data.gov.my/pricecatcher/lookup_premise.parquet";
     let mut premise_parquet = base_path.clone();
     premise_parquet.push("__cached__");
     premise_parquet.push("lookup_premise.parquet");
     let premise_parquet_file = get_file(premise_parquet.into_os_string().to_str().unwrap(), premise_parquet_url).unwrap();
     tasks.push((push_premise, premise_parquet_file.0, &memory_db));
 
-    let pricecatcher_parquet_url = format!("https://storage.googleapis.com/dosm-public-pricecatcher/pricecatcher_{}.parquet", date);
+    let pricecatcher_parquet_url = format!("https://storage.data.gov.my/pricecatcher/pricecatcher_{}.parquet", date);
     let pricecatcher_parquet_url = pricecatcher_parquet_url.as_str();
     let mut pricecatcher_parquet = base_path.clone();
     pricecatcher_parquet.push("__cached__");
