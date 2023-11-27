@@ -82,7 +82,7 @@ fn get_pricecatcher_records() -> Result<Vec<String>, Box<dyn std::error::Error>>
     }
     let mut records: Vec<String> = vec![];
     let fragment = Html::parse_fragment(&li_string);
-    let selector = Selector::parse("li").unwrap();
+    let selector = Selector::parse("a").unwrap();
     for element in fragment.select(&selector) {
         let texts: Vec<&str> = element.text().nth(0).unwrap().trim().split(" ").collect();
         if texts.len() == 2 && texts[0] == "PriceCatcher:" {
